@@ -1,0 +1,64 @@
+server:
+  port: ${PORT:8080}
+
+spring:
+  application:
+    name: reliable-event-delivery
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/events_db}
+    username: ${DATABASE_USERNAME:event_user}
+    password: ${DATABASE_PASSWORD:event_pass}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+        jdbc:
+          batch_size: 50
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: ${spring.application.name}
+      role: ${app.role:api}
+
+app:
+  role: ${APP_ROLE:api}
+  api-key: ${API_KEY:dev-api-key-32chars-secret-token-key}
+  worker:
+    id: ${WORKER_ID:worker-1}
+    batch-size: ${WORKER_BATCH_SIZE:10}
+    poll-interval-ms: ${WORKER_POLL_INTERVAL_MS:500}
+    lease-seconds: ${WORKER_LEASE_SECONDS:30}
+    concurrency: ${WORKER_CONCURRENCY:8}
+  delivery:
+    base-backoff-seconds: ${DELIVERY_BASE_BACKOFF_SECONDS:10}
+    max-backoff-seconds: ${DELIVERY_MAX_BACKOFF_SECONDS:3600}
+    max-attempts: ${DELIVERY_MAX_ATTEMPTS:8}
+    http-timeout-ms: ${DELIVERY_HTTP_TIMEOUT_MS:5000}

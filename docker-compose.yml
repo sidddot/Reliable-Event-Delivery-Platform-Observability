@@ -1,0 +1,161 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: event-platform-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 3s
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: event-platform-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: events_db
+      POSTGRES_USER: event_user
+      POSTGRES_PASSWORD: event_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U event_user -d events_db"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 3s
+
+  api:
+    build:
+      context: ./platform
+      dockerfile: Dockerfile
+    container_name: event-platform-api
+    restart: unless-stopped
+    environment:
+      APP_ROLE: api
+      PORT: 8080
+      DATABASE_URL: jdbc:postgresql://postgres:5432/events_db
+      DATABASE_USERNAME: event_user
+      DATABASE_PASSWORD: event_pass
+      API_KEY: dev-api-key-32chars-secret-token-key
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+
+  receiver-healthy:
+    build:
+      context: ./tools/mock_receiver
+      dockerfile: Dockerfile
+    container_name: event-platform-receiver-healthy
+    restart: unless-stopped
+    environment:
+      RECEIVER_MODE: healthy
+      RECEIVER_SECRET: whsec_healthy_receiver_secret_123456
+    ports:
+      - "8081:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  receiver-slow:
+    build:
+      context: ./tools/mock_receiver
+      dockerfile: Dockerfile
+    container_name: event-platform-receiver-slow
+    restart: unless-stopped
+    environment:
+      RECEIVER_MODE: slow
+      SLOW_DELAY_SECONDS: "2.0"
+      RECEIVER_SECRET: whsec_slow_receiver_secret_123456
+    ports:
+      - "8082:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  receiver-flaky:
+    build:
+      context: ./tools/mock_receiver
+      dockerfile: Dockerfile
+    container_name: event-platform-receiver-flaky
+    restart: unless-stopped
+    environment:
+      RECEIVER_MODE: flaky
+      FLAKY_FAILURE_RATE: "0.5"
+      RECEIVER_SECRET: whsec_flaky_receiver_secret_123456
+    ports:
+      - "8083:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  receiver-down:
+    build:
+      context: ./tools/mock_receiver
+      dockerfile: Dockerfile
+    container_name: event-platform-receiver-down
+    restart: unless-stopped
+    environment:
+      RECEIVER_MODE: down
+      RECEIVER_SECRET: whsec_down_receiver_secret_123456
+    ports:
+      - "8084:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: event-platform-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: event-platform-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      prometheus:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
