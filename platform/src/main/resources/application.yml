@@ -5,7 +5,7 @@ spring:
   application:
     name: reliable-event-delivery
   datasource:
-    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/events_db}
+    url: ${DATABASE_URL:jdbc:postgresql://event-platform-postgres:5432/events_db}
     username: ${DATABASE_USERNAME:event_user}
     password: ${DATABASE_PASSWORD:event_pass}
     driver-class-name: org.postgresql.Driver
@@ -28,7 +28,15 @@ spring:
   flyway:
     enabled: true
     baseline-on-migrate: true
-    locations: classpath:db/migration
+
+  security:
+    user:
+      name: test
+      password: test
+
+  redis:
+    host: event-platform-redis
+    port: 6379
 
 management:
   endpoints:

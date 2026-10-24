@@ -13,11 +13,14 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+// static imports
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+
 
 @WebMvcTest(EventController.class)
 public class EventControllerMetricsTest {
@@ -31,7 +34,11 @@ public class EventControllerMetricsTest {
     @MockBean
     private com.eventplatform.config.AppProperties appProperties;
 
+    @MockBean
+    private DeliveryMetrics deliveryMetrics;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
+
 
     @Test
     public void ingestEvent_incrementsMetric() throws Exception {
@@ -47,13 +54,16 @@ public class EventControllerMetricsTest {
         Mockito.when(ingestService.ingestEvent(Mockito.anyString(), any(IngestEventRequest.class)))
                 .thenReturn(mockResponse);
 
-        IngestEventRequest request = new IngestEventRequest("typeA", "partition-1", objectMapper.createObjectNode().put("foo", "bar"));
+        IngestEventRequest request = new IngestEventRequest("typeA", "partition-1",
+                objectMapper.createObjectNode().put("foo", "bar"));
         String json = objectMapper.writeValueAsString(request);
 
         mockMvc.perform(post("/api/v1/events")
                 .header("Idempotency-Key", "key-123")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
+                .content(json)
+                .with(httpBasic("test","test"))
+                )
                 .andExpect(status().isAccepted());
 
         // Verify metric increment was called exactly once
